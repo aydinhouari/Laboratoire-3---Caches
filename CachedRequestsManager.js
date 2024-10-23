@@ -44,8 +44,8 @@ export default class CachedRequestsManager {
                     if (cache.url == url) {
                         // renew cache
                         cache.Expire_Time = utilities.nowInSeconds() + requestsCachesExpirationTime;
-                        console.log(BgWhite + FgGreen, `[Url ${cache.url} content retrieved from cache]`);
-                        return cache.content;
+                        console.log(BgGreen + FgWhite, `[Url ${cache.url} content retrieved from request's cache]`);
+                        return [cache.content,cache.ETag];
                     }
                 }
             }
@@ -71,7 +71,7 @@ export default class CachedRequestsManager {
         let now = utilities.nowInSeconds();
         for (let cache of requestsCaches) {
             if (cache.Expire_Time <= now) {
-                console.log(BgWhite + FgBlue, "Cached file data of " + cache.url + " expired");
+                console.log(BgYellow + FgRed, "Cached file data of " + cache.url + " expired");
             }
         }
         requestsCaches = requestsCaches.filter(cache => cache.Expire_Time > now);
@@ -82,19 +82,21 @@ export default class CachedRequestsManager {
      */
     static get(HttpContext) {
         try {
-            if (!HttpContext.isCacheable)
-                return false;
+            let [content = null, eTag = ""] = CachedRequestsManager.find(HttpContext.req.url) || [];
 
-            let content = CachedRequestsManager.find(HttpContext.req.url);
-            if (content) {
+            if (!HttpContext.isCacheable || eTag == "")
+                return false;
+            else if(eTag != Repository.getETag(HttpContext.path.model) && eTag != ""){
+                CachedRequestsManager.clear(HttpContext.req.url);
+                return false;
+            } else {
                 HttpContext.response.JSON(
                     content,
-                    Repository.getETag(HttpContext.path.model),
+                    eTag,
                     true
                 );
                 return true;
             }
-            return false;
         } catch (error) {
             console.log(BgRed + FgWhite, "[request cache error!]", error);
             return false;
